@@ -1,11 +1,14 @@
 // KMR Bird progress on this device: coins, wardrobe, bests, achievements, daily chest.
 import {useSyncExternalStore} from 'react';
-import {MEDALS, type Medal, type RunResult} from '../game/engine';
+import {COIN_VALUE, MEDALS, type Medal, type RunResult} from '../game/engine';
 import {ALL_ITEMS, itemById, STARTER_LOOK, type Item, type Look, type Rarity, type Slot} from '../game/items';
 import {THEMES} from '../game/season';
 import {dayKey, now} from './clock';
+import {allQuests, DAILY_ALL_BONUS, dailyQuests, type Quest, type QuestKind} from './quests';
 
 const KEY = 'kmr.bird.v1';
+/** Coins per point scored. */
+export const SCORE_COINS = 5;
 
 export interface BirdSave {
   coins: number;
@@ -23,12 +26,15 @@ export interface BirdSave {
   eggs: number;
   fresh: string[];
   bought: Record<string, string>; // daily-shop purchases: id → day
+  quest: Record<string, {p: number; c?: boolean}>; // progress on the current hourly/daily quests
+  bonusDays: string[]; // days whose "all daily quests" bonus was claimed
+  gifts: string[]; // one-time gifts already claimed
   sound: boolean;
   seenTutorial: boolean;
 }
 
 const initial = (): BirdSave => ({
-  coins: 150,
+  coins: 500,
   owned: ['sunny'],
   look: {...STARTER_LOOK},
   best: 0,
@@ -43,6 +49,9 @@ const initial = (): BirdSave => ({
   eggs: 0,
   fresh: [],
   bought: {},
+  quest: {},
+  bonusDays: [],
+  gifts: ['update1'], // new players start with the bigger starting balance instead
   sound: true,
   seenTutorial: false,
 });
@@ -57,7 +66,7 @@ function load(): BirdSave {
     const look: Look = {};
     for (const [slot, id] of Object.entries(v.look ?? base.look)) if (id && owned.includes(id) && itemById(id)?.slot === slot) look[slot as Slot] = id;
     if (!look.color) look.color = 'sunny';
-    return {...base, ...v, owned, look, chest: {...base.chest, ...v.chest}, medals: {...v.medals}, bought: {...v.bought}};
+    return {...base, ...v, owned, look, chest: {...base.chest, ...v.chest}, medals: {...v.medals}, bought: {...v.bought}, quest: {...v.quest}, bonusDays: v.bonusDays ?? [], gifts: v.gifts ?? []};
   } catch {
     return initial();
   }
@@ -100,7 +109,7 @@ export const ACHIEVEMENTS: Achievement[] = [
 export const achievementItems = (id: string) => ALL_ITEMS.filter(i => i.source === 'achieve' && (i.achieve === id || (id === 'score100' && i.achieve === 'score100b')));
 
 // ---- daily chest ----------------------------------------------------------------------------
-export const CHEST_REWARDS = [60, 80, 100, 150, 200, 250, 400];
+export const CHEST_REWARDS = [250, 350, 450, 600, 800, 1000, 1500];
 export function chestStatus(s: BirdSave = state) {
   const today = dayKey();
   const yesterday = dayKey(now() - 86400000);
@@ -231,7 +240,54 @@ export interface Reward {
   newBest: boolean;
   unlocked: Item[];
   achievements: Achievement[];
+  questsDone: Quest[];
 }
+
+// ---- quests ---------------------------------------------------------------------------------
+const MEDAL_RANK: Record<string, number> = {bronze: 1, silver: 2, gold: 3, platinum: 4, diamond: 5, kmr: 6};
+function bumpQuests(prev: BirdSave['quest'], ev: {run?: RunResult; kind?: QuestKind; add?: number}): BirdSave['quest'] {
+  const out: BirdSave['quest'] = {};
+  for (const q of allQuests()) {
+    const cur = prev[q.id] ?? {p: 0};
+    let p = cur.p;
+    const r = ev.run;
+    if (r)
+      switch (q.kind) {
+        case 'score':
+          p = Math.max(p, r.score);
+          break;
+        case 'gaps':
+          p += r.score;
+          break;
+        case 'coins':
+          p += r.coins;
+          break;
+        case 'games':
+          p += 1;
+          break;
+        case 'flaps':
+          p += r.flaps;
+          break;
+        case 'medal':
+          p = Math.max(p, r.medal ? MEDAL_RANK[r.medal.id] : 0);
+          break;
+      }
+    else if (ev.kind === q.kind) p += ev.add ?? 1;
+    out[q.id] = {...cur, p};
+  }
+  return out; // quests from past hours/days drop off here
+}
+export const questProgress = (q: Quest, s: BirdSave = state) => s.quest[q.id] ?? {p: 0};
+export function claimableQuests(s: BirdSave = state): number {
+  const qs = allQuests().filter(q => {
+    const st = s.quest[q.id];
+    return st && st.p >= q.target && !st.c;
+  }).length;
+  const daily = dailyQuests();
+  const bonus = daily.every(q => s.quest[q.id]?.c) && !s.bonusDays.includes(dayKey()) ? 1 : 0;
+  return qs + bonus + (s.gifts.includes(UPDATE_GIFT.id) ? 0 : 1);
+}
+export const UPDATE_GIFT = {id: 'update1', coins: 2000, text: 'Thanks for playing! Coins are easier to earn now.'};
 
 export const save = {
   get: () => state,
@@ -254,6 +310,13 @@ export const save = {
     if (look[it.slot] === it.id && it.slot !== 'color') delete look[it.slot];
     else look[it.slot] = it.id;
     set({...state, look});
+  },
+  /** Wear a whole outfit at once (only items you own). */
+  setLook(look: Look) {
+    const next: Look = {};
+    for (const [slot, id] of Object.entries(look)) if (id && state.owned.includes(id) && itemById(id)?.slot === slot) next[slot as Slot] = id;
+    next.color ??= state.look.color ?? 'sunny';
+    set({...state, look: next});
   },
   unequip(slot: Slot) {
     if (slot === 'color') return;
@@ -285,6 +348,7 @@ export const save = {
       owned: dupe ? state.owned : [...state.owned, item.id],
       fresh: dupe ? state.fresh : [...state.fresh, item.id],
       eggs: state.eggs + 1,
+      quest: bumpQuests(state.quest, {kind: 'egg', add: 1}),
     });
     return {item, dupe, refund};
   },
@@ -296,8 +360,8 @@ export const save = {
   },
   finishRun(r: RunResult): Reward {
     const s = state;
-    const scoreCoins = r.score * 2;
-    const grabCoins = r.coins * 5;
+    const scoreCoins = r.score * SCORE_COINS;
+    const grabCoins = r.coins * COIN_VALUE;
     const medalCoins = r.medal?.bonus ?? 0;
     const coins = scoreCoins + grabCoins + medalCoins;
     const medals = {...s.medals};
@@ -311,6 +375,7 @@ export const save = {
       totalFlaps: s.totalFlaps + r.flaps,
       totalCoins: s.totalCoins + r.coins,
       medals,
+      quest: bumpQuests(s.quest, {run: r}),
     };
     const done = ACHIEVEMENTS.filter(a => !next.achieved.includes(a.id) && a.test(next));
     const unlocked: Item[] = [];
@@ -322,7 +387,25 @@ export const save = {
     next.owned = [...next.owned, ...unlocked.map(i => i.id)];
     next.fresh = [...next.fresh, ...unlocked.map(i => i.id)];
     set(next);
-    return {result: r, coins, scoreCoins, grabCoins, medalCoins, prevBest: s.best, newBest: r.score > s.best, unlocked, achievements: done};
+    const questsDone = allQuests().filter(q => (s.quest[q.id]?.p ?? 0) < q.target && (next.quest[q.id]?.p ?? 0) >= q.target);
+    return {result: r, coins, scoreCoins, grabCoins, medalCoins, prevBest: s.best, newBest: r.score > s.best, unlocked, achievements: done, questsDone};
+  },
+  claimQuest(q: Quest): boolean {
+    const st = state.quest[q.id];
+    if (!st || st.c || st.p < q.target) return false;
+    set({...state, coins: state.coins + q.reward, quest: {...state.quest, [q.id]: {...st, c: true}}});
+    return true;
+  },
+  claimDailyBonus(): boolean {
+    const day = dayKey();
+    if (state.bonusDays.includes(day) || !dailyQuests().every(q => state.quest[q.id]?.c)) return false;
+    set({...state, coins: state.coins + DAILY_ALL_BONUS, bonusDays: [...state.bonusDays.slice(-6), day]});
+    return true;
+  },
+  claimGift(): boolean {
+    if (state.gifts.includes(UPDATE_GIFT.id)) return false;
+    set({...state, coins: state.coins + UPDATE_GIFT.coins, gifts: [...state.gifts, UPDATE_GIFT.id]});
+    return true;
   },
   markSent(best: number) {
     if (state.sent < best) set({...state, sent: best});

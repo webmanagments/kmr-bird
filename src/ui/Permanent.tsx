@@ -8,7 +8,8 @@ import {now} from '../lib/clock';
 import {LiveBird, StillBird} from './BirdView';
 import {Check, Coin, Lock} from './icons';
 
-const PER_PAGE = 12; // 3 columns × 4 rows
+// The Permanent shop: every item in the game, shown inside the Shop's "Permanent" tab.
+const PER_PAGE = 9; // 3 columns × 3 rows
 const COLS = 3;
 const SOURCE_ORDER = {starter: 0, shop: 1, egg: 2, achieve: 3, daily: 4, event: 5} as const;
 
@@ -20,7 +21,7 @@ function sorted(slot: Slot): Item[] {
   );
 }
 
-export default function Wardrobe() {
+export default function Permanent() {
   const s = useSave();
   const [slot, setSlot] = useState<Slot>('color');
   const [page, setPage] = useState(0);
@@ -55,15 +56,24 @@ export default function Wardrobe() {
   });
 
   // Left from the first column always goes back to the slot you're in (not whichever is nearest).
+  // Up from the top row turns back a page, or goes to this tab (never a different shop tab).
   useEffect(() => {
     setKeyCapture(e => {
-      if (dirOf(e) !== 'left') return false;
+      const d = dirOf(e);
       const a = document.activeElement as HTMLElement | null;
-      if (!a?.dataset.idx || Number(a.dataset.idx) % COLS !== 0) return false;
-      return focusEl(document.querySelector<HTMLElement>(`[data-slot="${slot}"]`));
+      if (!a || a.closest('[data-focus-scope="modal"]')) return false;
+      const idx = a.dataset.idx ? Number(a.dataset.idx) : NaN;
+      if (d === 'left' && !Number.isNaN(idx) && idx % COLS === 0) return focusEl(document.querySelector<HTMLElement>(`[data-slot="${slot}"]`));
+      if (d === 'up' && !Number.isNaN(idx) && idx < COLS) {
+        if (page > 0) flip(page - 1, idx + PER_PAGE - COLS);
+        else focusEl(document.querySelector<HTMLElement>('[data-tab="permanent"]'));
+        return true;
+      }
+      if (d === 'up' && a.dataset.slot === SLOTS[0]) return focusEl(document.querySelector<HTMLElement>('[data-tab="permanent"]'));
+      return false;
     });
     return () => setKeyCapture(null);
-  }, [slot]);
+  });
 
   const flip = (p: number, idx: number) => {
     sfx.move();
@@ -128,16 +138,6 @@ export default function Wardrobe() {
 
   return (
     <div className="ward" data-modal={confirm ? '' : undefined}>
-      <header className="screen-head">
-        <h1>Wardrobe</h1>
-        <span className="head-sub">
-          {s.owned.length}/{ALL_ITEMS.length} collected
-        </span>
-        <span className="coins">
-          <Coin size={17} />
-          {s.coins.toLocaleString()}
-        </span>
-      </header>
 
       <div className="ward-rail" role="tablist" aria-label="Slots" inert={confirm ? true : undefined}>
         {SLOTS.map(sl => (
@@ -148,7 +148,6 @@ export default function Wardrobe() {
             aria-selected={sl === slot}
             className={`rail-btn${sl === slot ? ' is-on' : ''}`}
             data-slot={sl}
-            data-autofocus={sl === 'color' ? '' : undefined}
             onFocus={() => pickSlot(sl)}
             onClick={() => pickSlot(sl)}
           >

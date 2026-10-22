@@ -15,6 +15,10 @@ export interface Palette {
   pattern?: (g: CanvasRenderingContext2D, t: number) => void;
   /** Glow drawn behind the bird (additive). */
   glow?: string;
+  /** Only the clothes and accessories show: the body itself is invisible. */
+  invisible?: boolean;
+  /** The whole bird breaks up with RGB splits and sliced, jumping strips. */
+  glitch?: boolean;
 }
 
 export interface Pose {
@@ -43,7 +47,8 @@ export function bodyPath(g: CanvasRenderingContext2D) {
 }
 
 /** Draw the bird at (x, y) with `size` = body radius in pixels. */
-export function drawBird(g: CanvasRenderingContext2D, look: Look, x: number, y: number, size: number, pose: Pose) {
+export function drawBird(g: CanvasRenderingContext2D, look: Look, x: number, y: number, size: number, pose: Pose, plain = false) {
+  if (!plain && look.color && itemById(look.color)?.palette?.glitch) return drawGlitched(g, look, x, y, size, pose);
   const items: Partial<Record<Slot, Item>> = {};
   for (const s of SLOTS) {
     const id = look[s];
@@ -60,7 +65,21 @@ export function drawBird(g: CanvasRenderingContext2D, look: Look, x: number, y: 
   g.lineJoin = 'round';
   g.lineCap = 'round';
 
-  const c: Ctx = {pal, pose, look, eye: () => drawEye(g, pal, pose), beak: () => drawBeak(g, pal)};
+  const inv = !!pal.invisible;
+  const c: Ctx = {pal, pose, look, eye: () => !inv && drawEye(g, pal, pose), beak: () => !inv && drawBeak(g, pal)};
+
+  if (inv) {
+    // Just a faint shimmer where the body would be, so you can still tell where you are.
+    g.save();
+    g.globalAlpha = 0.1 + 0.06 * Math.sin(pose.t * 3);
+    bodyPath(g);
+    g.strokeStyle = '#cfe8ff';
+    g.lineWidth = 0.05;
+    g.setLineDash([0.12, 0.1]);
+    g.lineDashOffset = -pose.t * 0.4;
+    g.stroke();
+    g.restore();
+  }
 
   if (pal.glow) {
     const r = g.createRadialGradient(0, 0, 0.4, 0, 0, 1.9);
@@ -71,46 +90,54 @@ export function drawBird(g: CanvasRenderingContext2D, look: Look, x: number, y: 
   }
 
   // Back layer: legs (and anything worn on them), tail.
-  drawLegs(g, pal, pose);
+  if (!inv) drawLegs(g, pal, pose);
   items.pants?.legs?.(g, c);
   items.shoes?.draw(g, c);
-  drawTail(g, pal);
+  if (!inv) drawTail(g, pal);
   items.wings?.back?.(g, c);
 
   // Body
-  bodyPath(g);
-  g.fillStyle = pal.body;
-  g.fill();
+  if (!inv) {
+    bodyPath(g);
+    g.fillStyle = pal.body;
+    g.fill();
+  }
   g.save();
   bodyPath(g);
   g.clip();
-  g.fillStyle = pal.belly;
-  g.beginPath();
-  g.ellipse(0.24, 0.34, 0.66, 0.5, -0.15, 0, Math.PI * 2);
-  g.fill();
-  pal.pattern?.(g, pose.t);
-  // soft top light and bottom shade make the body round
-  const shade = g.createLinearGradient(0, -0.9, 0, 0.9);
-  shade.addColorStop(0, 'rgba(255,255,255,0.22)');
-  shade.addColorStop(0.45, 'rgba(255,255,255,0)');
-  shade.addColorStop(1, 'rgba(0,0,0,0.28)');
-  g.fillStyle = shade;
-  g.fillRect(-1.1, -1, 2.2, 2);
+  if (!inv) {
+    g.fillStyle = pal.belly;
+    g.beginPath();
+    g.ellipse(0.24, 0.34, 0.66, 0.5, -0.15, 0, Math.PI * 2);
+    g.fill();
+    pal.pattern?.(g, pose.t);
+    // soft top light and bottom shade make the body round
+    const shade = g.createLinearGradient(0, -0.9, 0, 0.9);
+    shade.addColorStop(0, 'rgba(255,255,255,0.22)');
+    shade.addColorStop(0.45, 'rgba(255,255,255,0)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.28)');
+    g.fillStyle = shade;
+    g.fillRect(-1.1, -1, 2.2, 2);
+  }
   items.pants?.draw(g, c);
   g.restore();
   items.belt?.draw(g, c);
 
-  // Cheek
-  g.fillStyle = pal.cheek ?? 'rgba(255,120,150,0.45)';
-  g.beginPath();
-  g.ellipse(0.6, 0.14, 0.12, 0.08, 0, 0, Math.PI * 2);
-  g.fill();
+  if (!inv) {
+    // Cheek
+    g.fillStyle = pal.cheek ?? 'rgba(255,120,150,0.45)';
+    g.beginPath();
+    g.ellipse(0.6, 0.14, 0.12, 0.08, 0, 0, Math.PI * 2);
+    g.fill();
+  }
 
   items.neck?.draw(g, c);
 
   // Face
-  drawEye(g, pal, pose);
-  drawBeak(g, pal);
+  if (!inv) {
+    drawEye(g, pal, pose);
+    drawBeak(g, pal);
+  }
   items.mask?.draw(g, c);
   items.eyes?.draw(g, c);
 
@@ -120,10 +147,84 @@ export function drawBird(g: CanvasRenderingContext2D, look: Look, x: number, y: 
   g.rotate(-0.55 + pose.flap * 1.05);
   g.scale(1.12, 1.12);
   if (items.wings) items.wings.draw(g, c);
-  else drawWing(g, pal);
+  else if (!inv) drawWing(g, pal);
   g.restore();
 
   items.hat?.draw(g, c);
+  g.restore();
+}
+
+// ---- Glitch: the bird is drawn off-screen, then split into colour channels and sliced ----------
+let glitchCanvas: HTMLCanvasElement | null = null;
+let tintCanvas: HTMLCanvasElement | null = null;
+const rnd = (i: number) => {
+  const x = Math.sin(i * 91.7 + 13.1) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+function drawGlitched(g: CanvasRenderingContext2D, look: Look, x: number, y: number, size: number, pose: Pose) {
+  const m = g.getTransform();
+  const k = Math.max(0.5, Math.hypot(m.a, m.b)); // draw at device resolution
+  const span = 4.4; // bird units across (room for hats, wings and beak)
+  const W = Math.ceil(size * span * k);
+  glitchCanvas ??= document.createElement('canvas');
+  tintCanvas ??= document.createElement('canvas');
+  const off = glitchCanvas;
+  if (off.width !== W) {
+    off.width = off.height = W;
+    tintCanvas.width = tintCanvas.height = W;
+  }
+  const og = off.getContext('2d')!;
+  og.setTransform(1, 0, 0, 1, 0, 0);
+  og.clearRect(0, 0, W, W);
+  drawBird(og, look, W / 2, W / 2, size * k, pose, true);
+
+  const frame = Math.floor(pose.t * 12);
+  const burst = rnd(frame) > 0.5; // about half the time it tears apart hard
+  const big = burst && rnd(frame + 7) > 0.55;
+  const unit = size; // px per bird unit on the target
+  const half = (size * span) / 2;
+  const split = (burst ? (big ? 0.34 : 0.2) : 0.09) * unit * (0.7 + rnd(frame + 3) * 0.6);
+
+  const tint = (color: string) => {
+    const tg = tintCanvas!.getContext('2d')!;
+    tg.setTransform(1, 0, 0, 1, 0, 0);
+    tg.globalCompositeOperation = 'source-over';
+    tg.clearRect(0, 0, W, W);
+    tg.drawImage(off, 0, 0);
+    tg.globalCompositeOperation = 'source-in';
+    tg.fillStyle = color;
+    tg.fillRect(0, 0, W, W);
+    return tintCanvas!;
+  };
+
+  g.save();
+  // Colour channels pulled apart (cyan one way, magenta the other).
+  g.globalCompositeOperation = 'lighter';
+  g.globalAlpha = 0.85;
+  g.drawImage(tint('#ff1e9a'), x - half - split, y - half + (burst ? split * 0.3 : 0), size * span, size * span);
+  g.drawImage(tint('#16f2ff'), x - half + split, y - half - (burst ? split * 0.3 : 0), size * span, size * span);
+  g.globalCompositeOperation = 'source-over';
+  g.globalAlpha = 1;
+  // The bird itself, cut into strips that jump sideways during a burst.
+  const strips = burst ? 7 : 1;
+  for (let i = 0; i < strips; i++) {
+    const sy = (W / strips) * i;
+    const sh = W / strips + 1;
+    const shift = burst ? (rnd(frame * 13 + i) - 0.5) * unit * (big ? 1.1 : 0.55) : 0;
+    g.drawImage(off, 0, sy, W, sh, x - half + shift, y - half + (sy / W) * size * span, size * span, (sh / W) * size * span);
+  }
+  // Scanlines and stray pixel blocks.
+  g.fillStyle = 'rgba(0,0,0,.35)';
+  for (let yy = y - unit * 1.1; yy < y + unit * 1.2; yy += Math.max(2, unit * 0.12)) g.fillRect(x - unit * 1.2, yy, unit * 2.6, Math.max(1, unit * 0.04));
+  if (burst) {
+    const cols = ['#16f2ff', '#ff1e9a', '#39ff88', '#ffffff'];
+    for (let i = 0; i < (big ? 9 : 5); i++) {
+      g.fillStyle = cols[i % 4];
+      const bw = unit * (0.12 + rnd(frame * 5 + i) * 0.5);
+      g.fillRect(x + (rnd(frame * 3 + i) - 0.5) * unit * 3, y + (rnd(frame * 7 + i) - 0.5) * unit * 2.4, bw, unit * 0.12);
+    }
+  }
   g.restore();
 }
 

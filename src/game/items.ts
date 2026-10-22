@@ -217,6 +217,7 @@ color('rainbow', 'Rainbow', 'Legendary', pal('#ff4b5c', '#ffffff', '#ffd23f', '#
   },
 }), {source: 'daily'});
 color('glitch', 'Glitch', 'Legendary', pal('#18ff8f', '#e0fff0', '#0fcc70', '#ffffff', '#ff2d95', {
+  glitch: true,
   pattern: (g, t) => {
     const k = Math.floor(t * 12);
     for (let i = 0; i < 5; i++) {
@@ -296,6 +297,7 @@ color('candycorn', 'Candy Corn', 'Rare', pal('#ffffff', '#ffffff', '#ff8a1a', '#
 }), {source: 'event', month: 9});
 color('zombie', 'Zombie', 'Rare', pal('#7fbf5a', '#b8d99a', '#5a8f3a', '#8a7a5a', '#5a8f3a', {pattern: spots('rgba(90,40,40,.35)', 6, 0.1), eye: '#c0302a'}), {source: 'event', month: 9});
 color('vampire', 'Vampire', 'Legendary', pal('#e8e4f0', '#ffffff', '#1a1020', '#a0102a', '#1a1020', {eye: '#c0102a', glow: 'rgba(200,16,42,.3)'}), {source: 'event', month: 9});
+color('horseman', 'Invisible Horseman', 'Legendary', pal('rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0)', {invisible: true}), {source: 'event', month: 9, price: 4000});
 color('turkey', 'Turkey', 'Rare', pal('#7a4a2a', '#b07a50', '#5a3418', '#ffb21e', '#ff6a3a'), {source: 'event', month: 10});
 color('maple', 'Maple', 'Rare', pal('#e8641a', '#ffc27a', '#b8320f', '#5a3418', '#5a3418', {pattern: stripes('rgba(180,40,10,.3)', 0.12, 0.4, 0.8)}), {source: 'event', month: 10});
 color('cranberry', 'Cranberry', 'Epic', pal('#a8102e', '#ff6a8a', '#7a0a20', '#ffd23f', '#7a0a20', {pattern: spots('rgba(255,140,170,.35)', 10, 0.06)}), {source: 'event', month: 10});

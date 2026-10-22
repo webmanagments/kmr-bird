@@ -4,9 +4,9 @@ import {sfx} from '../game/audio';
 import {BirdGame, medalFor} from '../game/engine';
 import {now, onClock} from '../lib/clock';
 import {useProfile} from '../lib/profile';
-import {chestStatus, currentTheme, eventItems, save, useSave} from '../lib/save';
+import {claimableQuests, currentTheme, eventItems, save, useSave} from '../lib/save';
 import {focusDefault, focusEl} from '../lib/spatial';
-import {Bag, Coin, LinkIcon, MedalIcon, Play, Shirt, SoundOff, SoundOn, Trophy} from './icons';
+import {Bag, Coin, Gift, LinkIcon, MedalIcon, Play, Shirt, SoundOff, SoundOn, Trophy} from './icons';
 import {LinkEnter, LinkShow} from './Link';
 
 export default function Home({go}: {go: Go}) {
@@ -19,7 +19,7 @@ export default function Home({go}: {go: Go}) {
   const theme = currentTheme();
   const events = eventItems();
   const eventLeft = events.filter(i => !s.owned.includes(i.id)).length;
-  const chest = chestStatus(s);
+  const quests = claimableQuests(s);
   const medal = medalFor(s.best);
   const daysLeft = (() => {
     const d = new Date(now());
@@ -117,13 +117,16 @@ export default function Home({go}: {go: Go}) {
       </button>
 
       <nav className="home-nav">
-        <button type="button" className="btn" data-nav="wardrobe" onClick={() => (sfx.select(), go('wardrobe'))}>
-          <Shirt /> Wardrobe
+        <button type="button" className="btn" data-nav="locker" onClick={() => (sfx.select(), go('locker'))}>
+          <Shirt /> Locker
           {s.fresh.length > 0 && <i className="dot" aria-label="New items" />}
         </button>
-        <button type="button" className="btn" data-nav="shop" onClick={() => openShop(chest.ready ? 'chest' : 'daily')}>
+        <button type="button" className="btn" data-nav="shop" onClick={() => openShop('daily')}>
           <Bag /> Shop
-          {chest.ready && <i className="dot" aria-label="Daily chest ready" />}
+        </button>
+        <button type="button" className="btn" data-nav="quests" onClick={() => (sfx.select(), go('quests'))}>
+          <Gift /> Quests
+          {quests > 0 && <i className="dot is-count">{quests}</i>}
         </button>
         <button type="button" className="btn is-icon" data-nav="board" aria-label="Leaderboard" onClick={() => (sfx.select(), go('board'))}>
           <Trophy />

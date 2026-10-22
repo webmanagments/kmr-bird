@@ -103,7 +103,7 @@ export default function Play({go, restart}: {go: Go; restart: () => void}) {
     if (phase !== 'run') requestAnimationFrame(() => focusDefault());
   }, [phase]);
 
-  const leave = (to: 'home' | 'wardrobe') => {
+  const leave = (to: 'home' | 'locker') => {
     leaving.current = true;
     sfx.select();
     go(to);
@@ -196,7 +196,7 @@ export default function Play({go, restart}: {go: Go; restart: () => void}) {
             sfx.select();
             restart();
           }}
-          onWardrobe={() => leave('wardrobe')}
+          onWardrobe={() => leave('locker')}
           onHome={() => leave('home')}
         />
       )}
@@ -283,6 +283,12 @@ function Results({r, onAgain, onWardrobe, onHome}: {r: Reward; onAgain: () => vo
             {r.achievements.length ? ` · ${r.achievements.reduce((a, x) => a + x.coins, 0)} bonus` : ''}
           </span>
         </div>
+        {r.questsDone.length > 0 && (
+          <div className="res-ach is-quest">
+            <span>Quest complete · claim it in Quests</span>
+            <b>{r.questsDone.map(q => `${q.text} (+${q.reward})`).join(' · ')}</b>
+          </div>
+        )}
         {r.achievements.length > 0 && (
           <div className="res-ach">
             <span>Achievement{r.achievements.length > 1 ? 's' : ''}</span>
@@ -302,7 +308,7 @@ function Results({r, onAgain, onWardrobe, onHome}: {r: Reward; onAgain: () => vo
           <button type="button" className="btn is-primary" data-autofocus onClick={onAgain}>
             <Restart /> Play again
           </button>
-          <button type="button" className="btn is-icon" onClick={onWardrobe} aria-label="Wardrobe">
+          <button type="button" className="btn is-icon" onClick={onWardrobe} aria-label="Locker">
             <Shirt />
           </button>
           <button type="button" className="btn is-icon" onClick={onHome} aria-label="Menu">

@@ -18,6 +18,8 @@ const SPACING = 236;
 const GRAVITY = 1650;
 const FLAP_V = -485;
 const MAX_FALL = 780;
+/** Coins each gap coin is worth. */
+export const COIN_VALUE = 10;
 
 export interface Medal {
   id: 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'kmr';
@@ -27,12 +29,12 @@ export interface Medal {
   bonus: number;
 }
 export const MEDALS: Medal[] = [
-  {id: 'bronze', name: 'Bronze', at: 10, color: '#d8894a', bonus: 10},
-  {id: 'silver', name: 'Silver', at: 20, color: '#d0d8e2', bonus: 25},
-  {id: 'gold', name: 'Gold', at: 30, color: '#ffc531', bonus: 50},
-  {id: 'platinum', name: 'Platinum', at: 40, color: '#bff4ff', bonus: 100},
-  {id: 'diamond', name: 'Diamond', at: 75, color: '#7fd8ff', bonus: 250},
-  {id: 'kmr', name: 'KMR Legend', at: 150, color: '#ff3b5c', bonus: 600},
+  {id: 'bronze', name: 'Bronze', at: 10, color: '#d8894a', bonus: 30},
+  {id: 'silver', name: 'Silver', at: 20, color: '#d0d8e2', bonus: 75},
+  {id: 'gold', name: 'Gold', at: 30, color: '#ffc531', bonus: 150},
+  {id: 'platinum', name: 'Platinum', at: 40, color: '#bff4ff', bonus: 300},
+  {id: 'diamond', name: 'Diamond', at: 75, color: '#7fd8ff', bonus: 750},
+  {id: 'kmr', name: 'KMR Legend', at: 150, color: '#ff3b5c', bonus: 2000},
 ];
 export const medalFor = (score: number): Medal | null => [...MEDALS].reverse().find(m => score >= m.at) ?? null;
 
@@ -194,7 +196,7 @@ export class BirdGame {
     let gap = lo + Math.random() * (hi - lo);
     gap = Math.max(this.lastGap - 170, Math.min(this.lastGap + 170, gap)); // never an impossible jump
     this.lastGap = gap;
-    const coin = !this.opts.attract && Math.random() < 0.32 ? {y: gap + (Math.random() - 0.5) * size * 0.4, taken: false} : null;
+    const coin = !this.opts.attract && Math.random() < 0.5 ? {y: gap + (Math.random() - 0.5) * size * 0.4, taken: false} : null;
     this.pipes.push({x, gap, size, scored: false, coin});
   }
 
@@ -294,7 +296,7 @@ export class BirdGame {
         p.coin.taken = true;
         this.coins++;
         sfx.coin();
-        this.pops.push({x: BIRD_X + 10, y: this.y - 30, text: '+1', color: '#ffc531', t: 0});
+        this.pops.push({x: BIRD_X + 10, y: this.y - 30, text: `+${COIN_VALUE}`, color: '#ffc531', t: 0});
         this.burst(BIRD_X + 10, p.coin.y, ['#ffc531', '#fff1b0'], 10, 120);
       }
       if (this.opts.attract) continue;

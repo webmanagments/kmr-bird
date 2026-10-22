@@ -4,13 +4,15 @@ import {sfx} from '../game/audio';
 import {RARITIES, RARITY_COLOR, SLOT_NAME, type Item} from '../game/items';
 import {fmtWait, msToNextDay, now} from '../lib/clock';
 import {availability, CHEST_REWARDS, chestStatus, currentTheme, DAILY_ODDS, dailyShop, EGGS, eventItems, save, useSave, type EggKind} from '../lib/save';
-import {focusDefault, focusEl, setEdgeHandler} from '../lib/spatial';
+import {dirOf, focusDefault, focusEl, setEdgeHandler, setKeyCapture} from '../lib/spatial';
 import {LiveBird, StillBird} from './BirdView';
+import Permanent from './Permanent';
 import {Check, Clock, Coin, EggIcon, Gift} from './icons';
 
 const TABS: {id: ShopTab; name: string}[] = [
   {id: 'daily', name: 'Daily'},
   {id: 'event', name: 'Event'},
+  {id: 'permanent', name: 'Permanent'},
   {id: 'eggs', name: 'Eggs'},
   {id: 'chest', name: 'Chest'},
 ];
@@ -46,8 +48,33 @@ export default function Shop(_: {go: Go}) {
     setTab(t);
   };
 
+  // Up from the top of a tab's content goes back to that tab (or a page back), never to a
+  // different tab that happens to be above.
+  useEffect(() => {
+    if (tab === 'permanent') return; // the Permanent tab handles its own keys
+    setKeyCapture(e => {
+      if (dirOf(e) !== 'up') return false;
+      const a = document.activeElement as HTMLElement | null;
+      const body = document.querySelector('.shop-body');
+      if (!a || !body || !body.contains(a)) return false;
+      const top = a.getBoundingClientRect().top;
+      const above = [...body.querySelectorAll<HTMLElement>('button:not([disabled])')].some(b => b !== a && b.getBoundingClientRect().bottom <= top + 4);
+      if (above) return false;
+      if (tab === 'event' && evPage > 0) {
+        const idx = Number(a.dataset.idx ?? 0);
+        setEvPage(evPage - 1);
+        requestAnimationFrame(() => focusEl(document.querySelectorAll<HTMLElement>('.ev-grid [data-idx]')[4 + (idx % 4)]));
+        sfx.move();
+        return true;
+      }
+      return focusEl(document.querySelector<HTMLElement>(`[data-tab="${tab}"]`));
+    });
+    return () => setKeyCapture(null);
+  });
+
   // Event items page down/up past the edge.
   useEffect(() => {
+    if (tab === 'permanent') return;
     setEdgeHandler((dir, from) => {
       if (tab !== 'event') return false;
       const idx = Number(from?.dataset.idx ?? NaN);
@@ -71,6 +98,7 @@ export default function Shop(_: {go: Go}) {
 
   // Back closes a popup first.
   useEffect(() => {
+    if (tab === 'permanent') return; // its buy popup handles Back itself
     backHandler.current = () => {
       if (reveal) {
         closeReveal();
@@ -326,6 +354,8 @@ export default function Shop(_: {go: Go}) {
           </div>
         </div>
       )}
+
+      {tab === 'permanent' && <Permanent />}
 
       {reveal && <EggReveal r={reveal} onClose={closeReveal} onAgain={() => (setReveal(null), openEgg(reveal.kind))} />}
     </div>

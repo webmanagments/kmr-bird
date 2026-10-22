@@ -9,10 +9,11 @@ import Home from './ui/Home';
 import NameSetup from './ui/NameSetup';
 import Play from './ui/Play';
 import Shop from './ui/Shop';
-import Wardrobe from './ui/Wardrobe';
+import Locker from './ui/Locker';
+import Quests from './ui/Quests';
 
-export type Screen = 'home' | 'play' | 'wardrobe' | 'shop' | 'board';
-export type ShopTab = 'daily' | 'event' | 'eggs' | 'chest';
+export type Screen = 'home' | 'play' | 'locker' | 'shop' | 'quests' | 'board';
+export type ShopTab = 'daily' | 'event' | 'permanent' | 'eggs' | 'chest';
 /** Which shop tab to open next (set before going to the shop). */
 export const shopTab: {current: ShopTab} = {current: 'daily'};
 export type Go = (s: Screen) => void;
@@ -130,7 +131,8 @@ export default function App() {
         <>
           {screen === 'home' && <Home go={go} />}
           {screen === 'play' && <Play key={runKey} go={go} restart={() => setRunKey(k => k + 1)} />}
-          {screen === 'wardrobe' && <Wardrobe />}
+          {screen === 'locker' && <Locker go={go} />}
+          {screen === 'quests' && <Quests />}
           {screen === 'shop' && <Shop go={go} />}
           {screen === 'board' && <Board />}
         </>
